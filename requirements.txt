@@ -1,0 +1,6 @@
+streamlit
+psycopg[binary]
+psycopg-pool
+pandas
+openpyxl
+python-dotenv
