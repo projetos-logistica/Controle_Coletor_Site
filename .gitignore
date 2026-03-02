@@ -5,6 +5,7 @@ __pycache__/
 # Ignorar o ambiente virtual
 venv/
 .venv/
+.env
 
 # Ignorar a pasta de saída do PyInstaller
 dist/
@@ -19,3 +20,7 @@ build/
 
 # Ignorar arquivos de sistema do macOS
 .DS_Store
+
+#linhas para nunca versionar
+~$*.xlsx
+*.xlsx
