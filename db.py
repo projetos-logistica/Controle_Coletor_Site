@@ -1,44 +1,106 @@
-# db.py (Supabase / Postgres) - SEM EMAIL + POOL (bom para Streamlit)
+# db.py (Supabase / Postgres) - Secrets.toml + fallback .env (bom para Streamlit)
 import os
-from typing import Dict, Optional
+from typing import Dict, Optional, List, Any
 
-from dotenv import load_dotenv
 import psycopg
 from psycopg.rows import tuple_row
 from psycopg_pool import ConnectionPool
 
-load_dotenv(override=True)
+# ✅ Carrega .env apenas como fallback local (não é obrigatório)
+try:
+    from dotenv import load_dotenv
+    load_dotenv(override=True)
+except ModuleNotFoundError:
+    pass
 
-DATABASE_URL = os.getenv("DATABASE_URL")
+# ✅ st.secrets funciona com .streamlit/secrets.toml (local) e Secrets (Cloud)
+try:
+    import streamlit as st
+except Exception:
+    st = None
+
+
+def _get_secret(key: str, default=None):
+    """
+    Prioridade:
+    1) st.secrets (se Streamlit estiver rodando)
+    2) variáveis de ambiente (.env / sistema)
+    """
+    if st is not None:
+        try:
+            if key in st.secrets:
+                return st.secrets.get(key, default)
+        except Exception:
+            pass
+    return os.getenv(key, default)
+
+
+# ======= Config do banco via Secrets =======
+PGHOST = _get_secret("PGHOST")
+PGPORT = _get_secret("PGPORT", "6543")
+PGDATABASE = _get_secret("PGDATABASE", "postgres")
+PGUSER = _get_secret("PGUSER")
+PGPASSWORD = _get_secret("PGPASSWORD")
+
+# (Opcional) fallback se ainda quiser usar DATABASE_URL em algum ambiente
+DATABASE_URL = _get_secret("DATABASE_URL")
 
 _pool: Optional[ConnectionPool] = None
 
 
-def _get_pool() -> ConnectionPool:
-    global _pool
-    if not DATABASE_URL:
-        raise RuntimeError(
-            "DATABASE_URL não definido. Configure a connection string do Supabase "
-            "em uma variável de ambiente chamada DATABASE_URL."
-        )
-    if _pool is None:
-        _pool = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=5)
-    return _pool
-
-
-import psycopg
-from psycopg.rows import tuple_row
-
 def conectar():
-    return psycopg.connect(
-        DATABASE_URL,
-        row_factory=tuple_row,
-        prepare_threshold=None,  # <- ESSENCIAL com transaction pooler
+    """
+    Conexão psycopg:
+    - Preferência: secrets PGHOST/PGUSER/PGPASSWORD (sem dor de URL encoding)
+    - Fallback: DATABASE_URL (se estiver definido)
+    """
+    # 1) Preferir secrets separados
+    if PGHOST and PGUSER and PGPASSWORD:
+        return psycopg.connect(
+            host=PGHOST,
+            port=int(PGPORT),
+            dbname=PGDATABASE,
+            user=PGUSER,
+            password=PGPASSWORD,
+            sslmode="require",
+            row_factory=tuple_row,
+            prepare_threshold=None,  # ESSENCIAL com transaction pooler
+        )
+
+    # 2) Fallback: DATABASE_URL (se existir)
+    if DATABASE_URL:
+        url = DATABASE_URL
+        if "sslmode=" not in url:
+            sep = "&" if "?" in url else "?"
+            url = f"{url}{sep}sslmode=require"
+        return psycopg.connect(
+            url,
+            row_factory=tuple_row,
+            prepare_threshold=None,
+        )
+
+    raise RuntimeError(
+        "Credenciais do banco não encontradas. Configure PGHOST/PGUSER/PGPASSWORD "
+        "em .streamlit/secrets.toml (ou defina DATABASE_URL)."
     )
 
 
 # Atalho (compatibilidade com seu projeto)
 get_conn = conectar
+
+
+def _get_pool() -> ConnectionPool:
+    """
+    Pool opcional (se você quiser usar). Mantive, mas usando DATABASE_URL.
+    Se você não usa pool em lugar nenhum, pode remover.
+    """
+    global _pool
+    if _pool is None:
+        if not DATABASE_URL:
+            # Pool só faz sentido com conninfo; não bloqueio o app por isso
+            raise RuntimeError("Para usar ConnectionPool, defina DATABASE_URL.")
+        _pool = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=5)
+    return _pool
 
 
 # ---------------------------
@@ -90,7 +152,6 @@ def inserir_usuario(id_usuario: str, nome_usuario: str, senha: str) -> None:
 # TOTAIS COLETORES
 # ---------------------------
 def get_totais_coletores() -> Dict[str, int]:
-    # ✅ agora inclui todos os cards
     totais = {
         "EM OPERACAO": 0,
         "DISPONIVEL": 0,
@@ -132,8 +193,10 @@ def get_totais_coletores() -> Dict[str, int]:
 
     return totais
 
-from typing import List, Dict, Any
 
+# ---------------------------
+# BASE COLETORES (último registro por coletor)
+# ---------------------------
 def get_base_coletores() -> List[Dict[str, Any]]:
     sql = """
     WITH ult AS (
@@ -183,7 +246,8 @@ def get_base_coletores() -> List[Dict[str, Any]]:
             "STATUS_COLETOR": status,
         })
 
-    return result   
+    return result
+
 
 def get_ultimo_movimento_coletor(id_coletor: str):
     """

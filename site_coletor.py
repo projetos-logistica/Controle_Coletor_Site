@@ -138,7 +138,7 @@ def render_login():
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --------------------------
-# UI: APP PRINCIPAL
+# UI: APP PRINCIPAL 
 # ----------------------------
 ACOES = [
     "Entrega Início operação",
