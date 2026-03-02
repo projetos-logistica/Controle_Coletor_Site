@@ -1,108 +1,39 @@
-# db.py (Supabase / Postgres) - Secrets.toml + fallback .env (bom para Streamlit)
-import os
-from typing import Dict, Optional, List, Any
-
+import streamlit as st
 import psycopg
 from psycopg.rows import tuple_row
-from psycopg_pool import ConnectionPool
+from typing import Dict, Optional, List, Any
 
-# ✅ Carrega .env apenas como fallback local (não é obrigatório)
+# ======= Config do banco via st.secrets =======
+# Agora o código vai falhar de propósito (e te avisar) se faltar algo no secrets.toml
 try:
-    from dotenv import load_dotenv
-    load_dotenv(override=True)
-except ModuleNotFoundError:
-    pass
-
-# ✅ st.secrets funciona com .streamlit/secrets.toml (local) e Secrets (Cloud)
-try:
-    import streamlit as st
-except Exception:
-    st = None
-
-
-def _get_secret(key: str, default=None):
-    """
-    Prioridade:
-    1) st.secrets (se Streamlit estiver rodando)
-    2) variáveis de ambiente (.env / sistema)
-    """
-    if st is not None:
-        try:
-            if key in st.secrets:
-                return st.secrets.get(key, default)
-        except Exception:
-            pass
-    return os.getenv(key, default)
-
-
-# ======= Config do banco via Secrets =======
-PGHOST = _get_secret("PGHOST")
-PGPORT = _get_secret("PGPORT", "6543")
-PGDATABASE = _get_secret("PGDATABASE", "postgres")
-PGUSER = _get_secret("PGUSER")
-PGPASSWORD = _get_secret("PGPASSWORD")
-
-# (Opcional) fallback se ainda quiser usar DATABASE_URL em algum ambiente
-DATABASE_URL = _get_secret("DATABASE_URL")
-
-_pool: Optional[ConnectionPool] = None
-
+    PGHOST = st.secrets["PGHOST"]
+    PGPORT = st.secrets.get("PGPORT", "6543")
+    PGDATABASE = st.secrets.get("PGDATABASE", "postgres")
+    PGUSER = st.secrets["PGUSER"]
+    PGPASSWORD = st.secrets["PGPASSWORD"]
+except KeyError as e:
+    raise RuntimeError(
+        f"Credencial ausente no .streamlit/secrets.toml: {e}. "
+        "Verifique se o arquivo existe e contém todas as chaves."
+    )
 
 def conectar():
     """
-    Conexão psycopg:
-    - Preferência: secrets PGHOST/PGUSER/PGPASSWORD (sem dor de URL encoding)
-    - Fallback: DATABASE_URL (se estiver definido)
+    Conexão psycopg estrita via st.secrets.
     """
-    # 1) Preferir secrets separados
-    if PGHOST and PGUSER and PGPASSWORD:
-        return psycopg.connect(
-            host=PGHOST,
-            port=int(PGPORT),
-            dbname=PGDATABASE,
-            user=PGUSER,
-            password=PGPASSWORD,
-            sslmode="require",
-            row_factory=tuple_row,
-            prepare_threshold=None,  # ESSENCIAL com transaction pooler
-        )
-
-    # 2) Fallback: DATABASE_URL (se existir)
-    if DATABASE_URL:
-        url = DATABASE_URL
-        if "sslmode=" not in url:
-            sep = "&" if "?" in url else "?"
-            url = f"{url}{sep}sslmode=require"
-        return psycopg.connect(
-            url,
-            row_factory=tuple_row,
-            prepare_threshold=None,
-        )
-
-    raise RuntimeError(
-        "Credenciais do banco não encontradas. Configure PGHOST/PGUSER/PGPASSWORD "
-        "em .streamlit/secrets.toml (ou defina DATABASE_URL)."
+    return psycopg.connect(
+        host=PGHOST,
+        port=int(PGPORT),
+        dbname=PGDATABASE,
+        user=PGUSER,
+        password=PGPASSWORD,
+        sslmode="require",
+        row_factory=tuple_row,
+        prepare_threshold=None,  # ESSENCIAL com transaction pooler do Supabase
     )
-
 
 # Atalho (compatibilidade com seu projeto)
 get_conn = conectar
-
-
-def _get_pool() -> ConnectionPool:
-    """
-    Pool opcional (se você quiser usar). Mantive, mas usando DATABASE_URL.
-    Se você não usa pool em lugar nenhum, pode remover.
-    """
-    global _pool
-    if _pool is None:
-        if not DATABASE_URL:
-            # Pool só faz sentido com conninfo; não bloqueio o app por isso
-            raise RuntimeError("Para usar ConnectionPool, defina DATABASE_URL.")
-        _pool = ConnectionPool(conninfo=DATABASE_URL, min_size=1, max_size=5)
-    return _pool
-
-
 # ---------------------------
 # LOGIN / USUÁRIO (public.usuario)
 # colunas: IDUsuario, NomeUsuario, Senha, Ativo

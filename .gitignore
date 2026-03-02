@@ -22,6 +22,4 @@ build/
 .DS_Store
 
 #linhas para nunca versionar
-~$*.xlsx
-*.xlsx
 .streamlit/secrets.toml
