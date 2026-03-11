@@ -152,6 +152,9 @@ ACOES = [
 
 def render_app():
 
+    if "msg_sucesso" not in st.session_state:
+        st.session_state["msg_sucesso"] = None
+
     # --- estados para manter resultados entre cliques ---
     if "resp_consultado" not in st.session_state:
         st.session_state["resp_consultado"] = False
@@ -254,10 +257,14 @@ def render_app():
         with d3:
             data_retorno = st.text_input("Data Retorno Conserto (YYYY-MM-DD)")
 
-    st.divider()
+    st.divider()  # ← fora do if mostrar_datas
 
-    # Botões
-    b1, b2 = st.columns(2)
+    # ✅ Mensagem de sucesso ACIMA do botão Salvar
+    if st.session_state.get("msg_sucesso"):
+        st.success(st.session_state["msg_sucesso"])
+        st.session_state["msg_sucesso"] = None
+
+    b1, b2 = st.columns(2)  # ← fora do if msg_sucesso
 
     with b1:
         if st.button("Salvar", type="primary"):
@@ -279,7 +286,7 @@ def render_app():
             )
 
             if ok:
-                st.success(msg)
+                st.session_state["msg_sucesso"] = "Coletor retornado com sucesso."
                 st.rerun()
             else:
                 st.error(msg)
