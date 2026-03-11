@@ -78,7 +78,6 @@ def logout():
 def render_login():
     st.markdown('<div class="login-wrap">', unsafe_allow_html=True)
 
-    # Logo menor e central
     logo_path = Path("assets/Logo Minimalista AZZAS.png")
     if logo_path.exists():
         st.image(str(logo_path), width=260)
@@ -138,7 +137,7 @@ def render_login():
         st.markdown("</div>", unsafe_allow_html=True)
 
 # --------------------------
-# UI: APP PRINCIPAL 
+# UI: APP PRINCIPAL
 # ----------------------------
 ACOES = [
     "Entrega Início operação",
@@ -152,14 +151,20 @@ ACOES = [
 
 def render_app():
 
+    # --- inicialização de estados ---
     if "msg_sucesso" not in st.session_state:
         st.session_state["msg_sucesso"] = None
-
-    # --- estados para manter resultados entre cliques ---
     if "resp_consultado" not in st.session_state:
         st.session_state["resp_consultado"] = False
     if "nome_resp" not in st.session_state:
         st.session_state["nome_resp"] = None
+
+    # Contador de geração: ao incrementar, os keys dos inputs mudam
+    # e o Streamlit cria novos widgets vazios automaticamente
+    if "input_gen" not in st.session_state:
+        st.session_state["input_gen"] = 0
+
+    gen = st.session_state["input_gen"]
 
     st.title("Controle Coletores WMS")
 
@@ -190,7 +195,8 @@ def render_app():
     c1, c2 = st.columns(2)
 
     with c1:
-        id_coletor = st.text_input("Coletor", key="id_coletor")
+        # key dinâmico: muda a cada salvar, forçando o campo a nascer vazio
+        id_coletor = st.text_input("Coletor", key=f"field_coletor_{gen}")
         if st.button("Consultar coletor"):
             if id_coletor.strip():
                 serial, stt, last_colab = consultar_coletor_resumo(id_coletor.strip())
@@ -205,13 +211,13 @@ def render_app():
                 st.warning("Informe um coletor.")
 
     with c2:
-        id_resp = st.text_input("Responsável", key="id_resp")
+        # key dinâmico: muda a cada salvar, forçando o campo a nascer vazio
+        id_resp = st.text_input("Responsável", key=f"field_resp_{gen}")
 
         if st.button("Consultar responsável"):
             st.session_state["resp_consultado"] = True
             st.session_state["nome_resp"] = buscar_nome_responsavel(id_resp)
 
-        # Só mostra resultado depois que clicar no botão
         if st.session_state["resp_consultado"]:
             nome = st.session_state["nome_resp"]
             if nome:
@@ -219,7 +225,7 @@ def render_app():
             else:
                 st.warning("Usuário não encontrado.")
 
-    # Regras de exibição (igual Tkinter)
+    # Regras de exibição
     mostrar_testes = acao_ui in ["Devolução término operação", "Envio Conserto"]
     mostrar_info = acao_ui in ["Envio Conserto", "Retorno Conserto", "Coletor Extraviado", "Coletor Inativo"]
     mostrar_datas = acao_ui in ["Envio Conserto", "Retorno Conserto"]
@@ -257,14 +263,14 @@ def render_app():
         with d3:
             data_retorno = st.text_input("Data Retorno Conserto (YYYY-MM-DD)")
 
-    st.divider()  # ← fora do if mostrar_datas
+    st.divider()
 
     # ✅ Mensagem de sucesso ACIMA do botão Salvar
     if st.session_state.get("msg_sucesso"):
         st.success(st.session_state["msg_sucesso"])
         st.session_state["msg_sucesso"] = None
 
-    b1, b2 = st.columns(2)  # ← fora do if msg_sucesso
+    b1, b2 = st.columns(2)
 
     with b1:
         if st.button("Salvar", type="primary"):
@@ -286,7 +292,10 @@ def render_app():
             )
 
             if ok:
-                st.session_state["msg_sucesso"] = "Ação Registrada com Sucesso."
+                st.session_state["msg_sucesso"] = "Coletor registrado com sucesso."
+                st.session_state["input_gen"] += 1  # ← muda os keys, campos nascem vazios
+                st.session_state["resp_consultado"] = False
+                st.session_state["nome_resp"] = None
                 st.rerun()
             else:
                 st.error(msg)
