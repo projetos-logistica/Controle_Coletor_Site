@@ -45,17 +45,7 @@ c5.metric("EXTRAVIADO", totais.get("EXTRAVIADO", 0))
 
 st.divider()
 
-colL, colR = st.columns([3, 1])
-with colR:
-    st.write(f"Logado: **{st.session_state.user}**")
-    if st.button("Voltar para Site"):
-        st.switch_page("site_coletor.py")
-
-if st.button("Atualizar Base"):
-    st.cache_data.clear()
-    st.rerun()
-
-# ✅ Busca no banco
+# ✅ Busca no banco (antes do filtro para popular o selectbox)
 rows = db.get_base_coletores()
 df = pd.DataFrame(rows)
 
@@ -68,29 +58,20 @@ if df.empty:
 # =========================================================
 tz_br = ZoneInfo("America/Sao_Paulo")
 
-# DATA_REGISTRO vem do db como datetime (geralmente timestamptz/UTC)
 df["DATA_REGISTRO_DT"] = pd.to_datetime(df["DATA_REGISTRO"], errors="coerce")
 
-# Converte para fuso BR
-# - Se vier timezone-aware: tz_convert
-# - Se vier naive: assume UTC e converte
 if df["DATA_REGISTRO_DT"].dt.tz is not None:
     df["DATA_REGISTRO_BR"] = df["DATA_REGISTRO_DT"].dt.tz_convert(tz_br)
 else:
     df["DATA_REGISTRO_BR"] = df["DATA_REGISTRO_DT"].dt.tz_localize("UTC").dt.tz_convert(tz_br)
 
-# DATA e HORA (texto) já no horário local
 df["DATA_REGISTRO"] = df["DATA_REGISTRO_BR"].dt.strftime("%d/%m/%Y")
 df["HORA_REGISTRO"] = df["DATA_REGISTRO_BR"].dt.strftime("%I:%M %p")
-# Se preferir 24h, use:
-# df["HORA_REGISTRO"] = df["DATA_REGISTRO_BR"].dt.strftime("%H:%M")
 
-# Excel: usuário/colaborador
 mapa = carregar_usuarios_xlsx("usuarios.xlsx")
 df["USUARIO"] = df["ID_COLABORADOR"].astype(str).fillna("").str.strip()
 df["COLABORADOR"] = df["USUARIO"].map(mapa).fillna("")
 
-# Leadtime operação (só para EM OPERAÇÃO) - usando fuso BR
 now_br = pd.Timestamp.now(tz=tz_br)
 
 def calc_lt(row) -> str:
@@ -101,7 +82,7 @@ def calc_lt(row) -> str:
 
 df["LEADTIME OPERAÇÃO"] = df.apply(calc_lt, axis=1)
 
-# --------- VISÃO FINAL (nomes únicos) ----------
+# --------- VISÃO FINAL ----------
 df_view = pd.DataFrame({
     "STATUS COLETOR": df["STATUS_COLETOR"],
     "DATA_REGISTRO": df["DATA_REGISTRO"],
@@ -114,7 +95,31 @@ df_view = pd.DataFrame({
     "LEADTIME OPERAÇÃO": df["LEADTIME OPERAÇÃO"],
 })
 
-# ✅ segurança extra: remove duplicadas (se ocorrer por algum motivo)
 df_view = df_view.loc[:, ~df_view.columns.duplicated()]
+
+# ---- Linha de controles: Filtro de Setor + (Logado / Voltar) ----
+colL, colR = st.columns([3, 1])
+
+with colL:
+    # Limita a largura do selectbox usando sub-colunas
+    sub1, sub2 = st.columns([1, 2])
+    with sub1:
+        setores = ["Todos"] + sorted(
+            df_view["SETOR"].dropna().astype(str).str.strip().unique().tolist()
+        )
+        setor_escolhido = st.selectbox("Filtrar por Setor", setores, key="filtro_setor")
+
+with colR:
+    st.write(f"Logado: **{st.session_state.user}**")
+    if st.button("Voltar para Site"):
+        st.switch_page("site_coletor.py")
+
+if st.button("Atualizar Base"):
+    st.cache_data.clear()
+    st.rerun()
+
+# ---- Aplica filtro ----
+if setor_escolhido != "Todos":
+    df_view = df_view[df_view["SETOR"].astype(str).str.strip() == setor_escolhido]
 
 st.dataframe(df_view, use_container_width=True, hide_index=True)
