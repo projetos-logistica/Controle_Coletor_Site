@@ -286,7 +286,7 @@ def render_app():
             )
 
             if ok:
-                st.session_state["msg_sucesso"] = "Coletor retornado com sucesso."
+                st.session_state["msg_sucesso"] = "Ação Registrada com Sucesso."
                 st.rerun()
             else:
                 st.error(msg)
