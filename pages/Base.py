@@ -1,3 +1,4 @@
+import io
 import streamlit as st
 import pandas as pd
 import db
@@ -122,4 +123,23 @@ if st.button("Atualizar Base"):
 if setor_escolhido != "Todos":
     df_view = df_view[df_view["SETOR"].astype(str).str.strip() == setor_escolhido]
 
+# ---- Esconde botão CSV nativo do Streamlit ----
+st.markdown("""
+    <style>
+    [data-testid="stDataFrameToolbar"] { display: none; }
+    </style>
+""", unsafe_allow_html=True)
+
 st.dataframe(df_view, use_container_width=True, hide_index=True)
+
+# ---- Botão de download em XLS ----
+output = io.BytesIO()
+with pd.ExcelWriter(output, engine="openpyxl") as writer:
+    df_view.to_excel(writer, index=False, sheet_name="Base Coletores")
+
+st.download_button(
+    label="⬇️ Exportar Base",
+    data=output.getvalue(),
+    file_name="base_coletores.xlsx",
+    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+)
