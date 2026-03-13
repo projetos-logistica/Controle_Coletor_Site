@@ -113,7 +113,7 @@ def render_login():
 
     with abas[1]:
         with st.form(key="cadastro_form_v1"):
-            nome = st.text_input("Nome completo", key="cad_nome")
+            nome = st.text_input("Usuário de Login (Seu login será seu primeiro e último nome) Ex: projetos.logistica", key="cad_nome")
             senha_cad = st.text_input("Senha", type="password", key="cad_senha")
             cadastrar = st.form_submit_button("Cadastrar", use_container_width=True)
 
